@@ -10,6 +10,8 @@ from obspy.signal.filter import bandpass
 from obspy.core.util.base import _get_function_from_entry_point
 
 
+
+
 ####################################################
 ############## CORE FUNCTIONS ######################
 ####################################################
@@ -76,7 +78,7 @@ def preprocess_raw_make_stat(tdata,prepro_para):
     tdata = tdata.T
 
     # parameters for butterworth filter
-    f1 = 0.5*freqmin
+    f1 = 0.9*freqmin
     f2 = freqmin
     if 1.1*freqmax > 0.45*samp_freq:
         f3 = 0.4*samp_freq
@@ -259,9 +261,7 @@ def correlate(fft1_smoothed_abs,fft2,D,Nfft):
 
     #------convert all 2D arrays into 1D to speed up--------
     corr = np.zeros(nwin*Nfft2,dtype=np.complex64)
-    #存放每行全是源的数组
-    fft1 = np.ones(shape=(nwin,1)) * fft1_smoothed_abs.reshape(1,fft1_smoothed_abs.size)  # duplicate fft1_smoothed_abs for nwin rows
-    #对应源的数组每个与每个相乘
+    fft1 = np.ones(shape=(nwin,1))*fft1_smoothed_abs.reshape(1,fft1_smoothed_abs.size)  # duplicate fft1_smoothed_abs for nwin rows
     corr = fft1.reshape(fft1.size,)*fft2.reshape(fft2.size,)
 
     if method == "coherency":
@@ -275,18 +275,14 @@ def correlate(fft1_smoothed_abs,fft2,D,Nfft):
     crap   = np.zeros(Nfft,dtype=np.complex64)
     for i in range(nwin):
         crap[:Nfft2] = corr[i,:]
-        # crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
+        crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
         crap[-(Nfft2)+1:] = np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
         crap[0]=complex(0,0)
         s_corr[i,:] = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
 
     # remove abnormal trace
     ampmax = np.max(s_corr,axis=1)
-    #zhangchengang--修改--不想挑选数据
-
-    # tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
-
-    tindx = np.arange(nwin)
+    tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
     s_corr = s_corr[tindx,:]
 
     # #####################################

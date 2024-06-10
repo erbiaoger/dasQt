@@ -23,6 +23,10 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 import numpy as np
 import os
+import pathlib
+import h5py
+from tqdm import tqdm
+
 
 class GetPoints(QMainWindow):
     def __init__(self):
@@ -195,24 +199,61 @@ class GetPoints(QMainWindow):
         for file in self.files:
             self.list_widget.addItem(file)
 
-    def readData(self, filename):
-        #filename = 'guangu/2023-07-20-18-40-58-out.dat'
-        with open(filename, 'rb') as fid:
-            D = np.fromfile(fid, dtype=np.float32)
 
-        fs = D[10]
-        self.dt = 1 / fs
-        self.dx = D[13]
-        self.nx = int(D[16])
-        self.nt = int(fs * D[17])
-        self.t = np.arange(self.nt) * self.dt
-        self.x = np.arange(self.nx) * self.dx
+    def readData(self, filename='./Data/SR_2023-07-20_09-09-38_UTC.h5'):
+        self.fname = filename
+        fileType = os.path.splitext(filename)[-1]
+        if fileType == '.h5':
+            # with h5py.File(filename, 'r') as f:
+            #     StrainRate = f['/fa1-22070070/Source1/Zone1/StrainRate'][:]
+            #     spacing = f['/fa1-22070070/Source1/Zone1'].attrs['Spacing']
 
-        self.data = D[64:].reshape((self.nx, self.nt), order='F').T  # 使用Fortran顺序进行数据的reshape
+            with h5py.File(filename, 'r') as f:
+                for a in f:
+                    StrainRate = f[f'/{a}/Source1/Zone1/StrainRate'][:]
+                    spacing = f[f'/{a}/Source1/Zone1'].attrs['Spacing']
 
-        #self.data = self.data[::10, :]
-        self.nt = self.data.shape[0]
 
+            #self.data = StrainRate.reshape(-1, StrainRate.shape[-1])
+            self.dx = spacing[0]
+            self.dt = spacing[1] * 1e-3
+            nb, nt, nx = StrainRate.shape
+
+            self.data = StrainRate[:, nt//2:, :].reshape(-1, nx)
+
+            self.nt, self.nx = self.data.shape
+
+            self.pre_data = self.data.copy()
+            self.vmin = np.nanmin(self.data)
+            self.vmax = np.nanmax(self.data)
+            
+            filepath = pathlib.Path(filename)
+
+        elif fileType == '.dat':
+            #filename = 'guangu/2023-07-20-18-40-58-out.dat'
+            with open(filename, 'rb') as fid:
+                D = np.fromfile(fid, dtype=np.float32)
+
+            fs = D[10]
+            self.dt = 1 / fs
+            self.dx = D[13]
+            self.nx = int(D[16])
+            self.nt = int(fs * D[17])
+
+            self.data = D[64:].reshape((self.nx, self.nt), order='F').T  # 使用Fortran顺序进行数据的reshape
+
+            self.pre_data = self.data.copy()
+            self.vmin = np.nanmin(self.data)
+            self.vmax = np.nanmax(self.data)
+            
+            filepath = pathlib.Path(filename)
+        else:
+            raise ValueError("File Type Error!")
+
+        self.radon_data = self.data.copy()
+        self.pre_data = self.data.copy()
+        
+        # self.process()
 
         self.vmin = np.nanmin(self.data)
         self.vmax = np.nanmax(self.data)

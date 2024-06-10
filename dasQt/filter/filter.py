@@ -59,6 +59,6 @@ if __name__ == "__main__":
     data = np.random.rand(1000, 3)
     fmin = 0.1
     fmax = 0.2
-    dt = 0.1
+    dt   = 0.1
     
     data = butterworth(data, cutoff=(fmin, fmax), fs=1/dt, order=6, btype='bandpass', axis=0)

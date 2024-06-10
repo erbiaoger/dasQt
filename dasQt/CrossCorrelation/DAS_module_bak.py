@@ -4,7 +4,6 @@ import glob
 import scipy
 import numpy as np
 from numba import jit
-from scipy.signal import hilbert
 from scipy.fftpack import next_fast_len
 from obspy.signal.filter import bandpass
 from obspy.core.util.base import _get_function_from_entry_point
@@ -76,7 +75,7 @@ def preprocess_raw_make_stat(tdata,prepro_para):
     tdata = tdata.T
 
     # parameters for butterworth filter
-    f1 = 0.5*freqmin
+    f1 = 0.9*freqmin
     f2 = freqmin
     if 1.1*freqmax > 0.45*samp_freq:
         f3 = 0.4*samp_freq
@@ -259,9 +258,7 @@ def correlate(fft1_smoothed_abs,fft2,D,Nfft):
 
     #------convert all 2D arrays into 1D to speed up--------
     corr = np.zeros(nwin*Nfft2,dtype=np.complex64)
-    #存放每行全是源的数组
-    fft1 = np.ones(shape=(nwin,1)) * fft1_smoothed_abs.reshape(1,fft1_smoothed_abs.size)  # duplicate fft1_smoothed_abs for nwin rows
-    #对应源的数组每个与每个相乘
+    fft1 = np.ones(shape=(nwin,1))*fft1_smoothed_abs.reshape(1,fft1_smoothed_abs.size)  # duplicate fft1_smoothed_abs for nwin rows
     corr = fft1.reshape(fft1.size,)*fft2.reshape(fft2.size,)
 
     if method == "coherency":
@@ -275,19 +272,15 @@ def correlate(fft1_smoothed_abs,fft2,D,Nfft):
     crap   = np.zeros(Nfft,dtype=np.complex64)
     for i in range(nwin):
         crap[:Nfft2] = corr[i,:]
-        # crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
+        crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
         crap[-(Nfft2)+1:] = np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
         crap[0]=complex(0,0)
         s_corr[i,:] = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
 
     # remove abnormal trace
     ampmax = np.max(s_corr,axis=1)
-    #zhangchengang--修改--不想挑选数据
-
-    # tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
-
-    tindx = np.arange(nwin)
-    s_corr = s_corr[tindx,:]
+    tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
+    # s_corr = s_corr[tindx,:]
 
     # #####################################
     # t = np.arange(-Nfft2+1, Nfft2)*dt
@@ -304,372 +297,6 @@ def correlate(fft1_smoothed_abs,fft2,D,Nfft):
         s_corr = s_corr[:,ind]
     return s_corr,tindx
 
-
-def stacking(cc_array,stack_para):
-    '''
-    this function stacks the cross correlation data according to the user-defined substack_len parameter
-
-    PARAMETERS:
-    ----------------------
-    cc_array: 2D numpy float32 matrix containing all segmented cross-correlation data
-    cc_time:  1D numpy array of timestamps for each segment of cc_array
-    cc_ngood: 1D numpy int16 matrix showing the number of segments for each sub-stack and/or full stack
-    stack_para: a dict containing all stacking parameters
-
-    RETURNS:
-    ----------------------
-    cc_array, cc_ngood, cc_time: same to the input parameters but with abnormal cross-correaltions removed
-    allstacks1: 1D matrix of stacked cross-correlation functions over all the segments
-    nstacks:    number of overall segments for the final stacks
-    '''
-    # load useful parameters from dict
-    samp_freq = stack_para['samp_freq']
-    smethod   = stack_para['stack_method']
-    nsta,npts_chunk = stack_para['nsta'],stack_para['npts_chunk']
-
-
-    # remove abnormal data
-    # ampmax = np.max(cc_array,axis=1)
-    # tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
-
-    # if not len(tindx):
-    #     allstacks1=[];allstacks2=[];allstacks3=[]
-    #     nstacks=0;cc_array=[]
-        
-    #     return cc_array,allstacks1
-    # else:
-
-        # remove ones with bad amplitude
-        # cc_array = cc_array[tindx,:]
-
-    # do stacking
-    # allstacks1 = np.zeros(npts_chunk*nsta,dtype=np.float32)
-    if smethod == 'linear':
-        allstacks1 = np.mean(cc_array,axis=0)
-    elif smethod == 'pws':
-        allstacks1 = pws(cc_array,samp_freq)
-    elif smethod == 'robust':
-        allstacks1,w,nstep = robust_stack(cc_array,0.001)
-
-    allstacks1 = allstacks1.reshape(npts_chunk, nsta)
-
-    # if not len(allstacks1):
-    return allstacks1
-
-
-
-####################################################
-############## UTILITY FUNCTIONS ###################
-####################################################
-
-def detrend(data):
-    '''
-    this function removes the signal trend based on QR decomposion
-    NOTE: QR is a lot faster than the least square inversion used by
-    scipy (also in obspy).
-    PARAMETERS:
-    ---------------------
-    data: input data matrix
-    RETURNS:
-    ---------------------
-    data: data matrix with trend removed
-    '''
-    #ndata = np.zeros(shape=data.shape,dtype=data.dtype)
-    if data.ndim == 1:
-        npts = data.shape[0]
-        X = np.ones((npts,2))
-        X[:,0] = np.arange(0,npts)/npts
-        Q,R = np.linalg.qr(X)
-        rq  = np.dot(np.linalg.inv(R),Q.transpose())
-        coeff = np.dot(rq,data)
-        data = data-np.dot(X,coeff)
-    elif data.ndim == 2:
-        npts = data.shape[1]
-        X = np.ones((npts,2))
-        X[:,0] = np.arange(0,npts)/npts
-        Q,R = np.linalg.qr(X)
-        rq = np.dot(np.linalg.inv(R),Q.transpose())
-        for ii in range(data.shape[0]):
-            coeff = np.dot(rq,data[ii])
-            data[ii] = data[ii] - np.dot(X,coeff)
-    return data
-
-def demean(data):
-    '''
-    this function remove the mean of the signal
-    PARAMETERS:
-    ---------------------
-    data: input data matrix
-    RETURNS:
-    ---------------------
-    data: data matrix with mean removed
-    '''
-    #ndata = np.zeros(shape=data.shape,dtype=data.dtype)
-    if data.ndim == 1:
-        data = data-np.mean(data)
-    elif data.ndim == 2:
-        for ii in range(data.shape[0]):
-            data[ii] = data[ii]-np.mean(data[ii])
-    return data
-
-def taper(data):
-    '''
-    this function applies a cosine taper using obspy functions
-    PARAMETERS:
-    ---------------------
-    data: input data matrix
-    RETURNS:
-    ---------------------
-    data: data matrix with taper applied
-    '''
-    #ndata = np.zeros(shape=data.shape,dtype=data.dtype)
-    if data.ndim == 1:
-        npts = data.shape[0]
-        # window length
-        if npts*0.05>20:wlen = 20
-        else:wlen = npts*0.05
-        # taper values
-        func = _get_function_from_entry_point('taper', 'hann')
-        if 2*wlen == npts:
-            taper_sides = func(2*wlen)
-        else:
-            taper_sides = func(2*wlen+1)
-        # taper window
-        win  = np.hstack((taper_sides[:wlen], np.ones(npts-2*wlen),taper_sides[len(taper_sides) - wlen:]))
-        data *= win
-    elif data.ndim == 2:
-        npts = data.shape[1]
-        # window length
-        if npts*0.05>20:wlen = 20
-        else:wlen = npts*0.05
-        # taper values
-        func = _get_function_from_entry_point('taper', 'hann')
-        if 2*wlen == npts:
-            taper_sides = func(2*wlen)
-        else:
-            taper_sides = func(2*wlen + 1)
-        # taper window
-        win  = np.hstack((taper_sides[:wlen], np.ones(npts-2*wlen),taper_sides[len(taper_sides) - wlen:]))
-        for ii in range(data.shape[0]):
-            data[ii] *= win
-    return data
-
-def mad(arr):
-    """
-    Median Absolute Deviation: MAD = median(|Xi- median(X)|)
-    PARAMETERS:
-    -------------------
-    arr: numpy.ndarray, seismic trace data array
-    RETURNS:
-    data: Median Absolute Deviation of data
-    """
-    if not np.ma.is_masked(arr):
-        med = np.median(arr)
-        data = np.median(np.abs(arr - med))
-    else:
-        med = np.ma.median(arr)
-        data = np.ma.median(np.ma.abs(arr-med))
-    return data
-
-@jit(nopython = True)
-def moving_ave(A,N):
-    '''
-    this Numba compiled function does running smooth average for an array.
-    PARAMETERS:
-    ---------------------
-    A: 1-D array of data to be smoothed
-    N: integer, it defines the half window length to smooth
-
-    RETURNS:
-    ---------------------
-    B: 1-D array with smoothed data
-    '''
-    A = np.concatenate((A[:N],A,A[-N:]),axis=0)
-    B = np.zeros(A.shape,A.dtype)
-
-    tmp=0.
-    for pos in range(N,A.size-N):
-        # do summing only once
-        if pos==N:
-            for i in range(-N,N+1):
-                tmp+=A[pos+i]
-        else:
-            tmp=tmp-A[pos-N-1]+A[pos+N]
-        B[pos]=tmp/(2*N+1)
-        if B[pos]==0:
-            B[pos]=1
-    return B[N:-N]
-
-
-def whiten(data, fft_para):
-    '''
-    This function takes 1-dimensional timeseries array, transforms to frequency domain using fft,
-    whitens the amplitude of the spectrum in frequency domain between *freqmin* and *freqmax*
-    and returns the whitened fft.
-    PARAMETERS:
-    ----------------------
-    data: numpy.ndarray contains the 1D time series to whiten
-    fft_para: dict containing all fft_cc parameters such as
-        dt: The sampling space of the `data`
-        freqmin: The lower frequency bound
-        freqmax: The upper frequency bound
-        smooth_N: integer, it defines the half window length to smooth
-        freq_norm: whitening method between 'one-bit' and 'RMA'
-    RETURNS:
-    ----------------------
-    FFTRawSign: numpy.ndarray contains the FFT of the whitened input trace between the frequency bounds
-    '''
-
-    # load parameters
-    samp_freq = fft_para['samp_freq']
-    delta   = 1/samp_freq
-    freqmin = fft_para['freqmin']
-    freqmax = fft_para['freqmax']
-    smooth_N  = fft_para['smooth_N']
-    freq_norm = fft_para['freq_norm']
-
-    # Speed up FFT by padding to optimal size for FFTPACK
-    if data.ndim == 1:
-        axis = 0
-    elif data.ndim == 2:
-        axis = 1
-
-    Nfft = int(next_fast_len(int(data.shape[axis])))
-
-    Napod = 100
-    Nfft = int(Nfft)
-    freqVec = scipy.fftpack.fftfreq(Nfft, d=delta)[:Nfft // 2]
-    J = np.where((freqVec >= freqmin) & (freqVec <= freqmax))[0]
-    low = J[0] - Napod
-    if low <= 0:
-        low = 1
-
-    left = J[0]
-    right = J[-1]
-    high = J[-1] + Napod
-    if high > Nfft/2:
-        high = int(Nfft//2)
-
-    FFTRawSign = scipy.fftpack.fft(data, Nfft,axis=axis)
-    # Left tapering:
-    if axis == 1:
-        FFTRawSign[:,0:low] *= 0
-        FFTRawSign[:,low:left] = np.cos(
-            np.linspace(np.pi / 2., np.pi, left - low)) ** 2 * np.exp(
-            1j * np.angle(FFTRawSign[:,low:left]))
-        # Pass band:
-        if freq_norm == 'phase_only':
-            FFTRawSign[:,left:right] = np.exp(1j * np.angle(FFTRawSign[:,left:right]))
-        elif freq_norm == 'rma':
-            for ii in range(data.shape[0]):
-                tave = moving_ave(np.abs(FFTRawSign[ii,left:right]),smooth_N)
-                FFTRawSign[ii,left:right] = FFTRawSign[ii,left:right]/tave
-        # Right tapering:
-        FFTRawSign[:,right:high] = np.cos(
-            np.linspace(0., np.pi / 2., high - right)) ** 2 * np.exp(
-            1j * np.angle(FFTRawSign[:,right:high]))
-        FFTRawSign[:,high:Nfft//2] *= 0
-
-        # Hermitian symmetry (because the input is real)
-        FFTRawSign[:,-(Nfft//2)+1:] = np.flip(np.conj(FFTRawSign[:,1:(Nfft//2)]),axis=axis)
-    else:
-        FFTRawSign[0:low] *= 0
-        FFTRawSign[low:left] = np.cos(
-            np.linspace(np.pi / 2., np.pi, left - low)) ** 2 * np.exp(
-            1j * np.angle(FFTRawSign[low:left]))
-        # Pass band:
-        if freq_norm == 'phase_only':
-            FFTRawSign[left:right] = np.exp(1j * np.angle(FFTRawSign[left:right]))
-        elif freq_norm == 'rma':
-            tave = moving_ave(np.abs(FFTRawSign[left:right]),smooth_N)
-            FFTRawSign[left:right] = FFTRawSign[left:right]/tave
-        # Right tapering:
-        FFTRawSign[right:high] = np.cos(
-            np.linspace(0., np.pi / 2., high - right)) ** 2 * np.exp(
-            1j * np.angle(FFTRawSign[right:high]))
-        FFTRawSign[high:Nfft//2] *= 0
-
-        # Hermitian symmetry (because the input is real)
-        FFTRawSign[-(Nfft//2)+1:] = FFTRawSign[1:(Nfft//2)].conjugate()[::-1]
-
-    return FFTRawSign
-
-
-
-def pws(arr,sampling_rate,power=2,pws_timegate=5.):
-    '''
-    Performs phase-weighted stack on array of time series. Modified on the noise function by Tim Climents.
-    Follows methods of Schimmel and Paulssen, 1997.
-    If s(t) is time series data (seismogram, or cross-correlation),
-    S(t) = s(t) + i*H(s(t)), where H(s(t)) is Hilbert transform of s(t)
-    S(t) = s(t) + i*H(s(t)) = A(t)*exp(i*phi(t)), where
-    A(t) is envelope of s(t) and phi(t) is phase of s(t)
-    Phase-weighted stack, g(t), is then:
-    g(t) = 1/N sum j = 1:N s_j(t) * | 1/N sum k = 1:N exp[i * phi_k(t)]|^v
-    where N is number of traces used, v is sharpness of phase-weighted stack
-
-    PARAMETERS:
-    ---------------------
-    arr: N length array of time series data (numpy.ndarray)
-    sampling_rate: sampling rate of time series arr (int)
-    power: exponent for phase stack (int)
-    pws_timegate: number of seconds to smooth phase stack (float)
-
-    RETURNS:
-    ---------------------
-    weighted: Phase weighted stack of time series data (numpy.ndarray)
-    '''
-
-    if arr.ndim == 1:
-        return arr
-    N,M = arr.shape
-    analytic = hilbert(arr,axis=1, N=next_fast_len(M))[:,:M]
-    phase = np.angle(analytic)
-    phase_stack = np.mean(np.exp(1j*phase),axis=0)
-    phase_stack = np.abs(phase_stack)**(power)
-
-    # smoothing
-    #timegate_samples = int(pws_timegate * sampling_rate)
-    #phase_stack = moving_ave(phase_stack,timegate_samples)
-    weighted = np.multiply(arr,phase_stack)
-    return np.mean(weighted,axis=0)
-
-
-def robust_stack(cc_array,epsilon):
-    """
-    this is a robust stacking algorithm described in Palvis and Vernon 2010
-
-    PARAMETERS:
-    ----------------------
-    cc_array: numpy.ndarray contains the 2D cross correlation matrix
-    epsilon: residual threhold to quit the iteration
-    RETURNS:
-    ----------------------
-    newstack: numpy vector contains the stacked cross correlation
-
-    Written by Marine Denolle
-    """
-    res  = 9E9  # residuals
-    w = np.ones(cc_array.shape[0])
-    nstep=0
-    newstack = np.median(cc_array,axis=0)
-    while res > epsilon:
-        stack = newstack
-        for i in range(cc_array.shape[0]):
-            crap = np.multiply(stack,cc_array[i,:].T)
-            crap_dot = np.sum(crap)
-            di_norm = np.linalg.norm(cc_array[i,:])
-            ri = cc_array[i,:] -  crap_dot*stack
-            ri_norm = np.linalg.norm(ri)
-            w[i]  = np.abs(crap_dot) /di_norm/ri_norm#/len(cc_array[:,1])
-        # print(w)
-        w =w /np.sum(w)
-        newstack =np.sum( (w*cc_array.T).T,axis=0)#/len(cc_array[:,1])
-        res = np.linalg.norm(newstack-stack,ord=1)/np.linalg.norm(newstack)/len(cc_array[:,1])
-        nstep +=1
-        if nstep>10:
-            return newstack, w, nstep
-    return newstack, w, nstep
 
 ####################################################
 ############## UTILITY FUNCTIONS ###################

@@ -28,7 +28,7 @@ class HandleLog():
     最后再将日志处理程序记录到记录器（addHandler）
     """
  
-    def __init__(self, log_name, path="./"):
+    def __init__(self, log_name, path="./", level="DEBUG"):
         self.__now_time = datetime.now().strftime('%Y-%m-%d')  # 当前日期格式化
         self.file_basename = log_name 
         log_path = os.path.join(path, 'logs')  # log_path为存放日志的路径
@@ -43,13 +43,30 @@ class HandleLog():
             'CRITICAL': 'bold_red',
         }
 
+        match level:
+            case "DEBUG":
+                log_level = logging.DEBUG
+            case "INFO":
+                log_level = logging.INFO
+                print("INFO")
+            case "WARNING":
+                log_level = logging.WARNING
+            case "ERROR":
+                log_level = logging.ERROR
+            case "CRITICAL":
+                log_level = logging.CRITICAL
+            case _:
+                log_level = logging.INFO
+                
+        self.log_level = log_level
+
  
         self.__all_log_path = os.path.join(log_path, log_name + " " + self.__now_time + "-all" + ".log")  # 收集所有日志信息文件
         self.__error_log_path = os.path.join(log_path, log_name + " " + self.__now_time + "-error" + ".log")  # 收集错误日志信息文件
  
         # 配置日志记录器及其级别 设置默认日志记录器记录级别为DEBUG
         self.__logger = logging.getLogger()  # 创建日志记录器
-        self.__logger.setLevel(logging.DEBUG)  # 设置默认日志记录器记录级别
+        self.__logger.setLevel(log_level)  # 设置默认日志记录器记录级别
  
     @staticmethod
     def __init_logger_handler(log_path):
@@ -83,7 +100,7 @@ class HandleLog():
         :param console_handle: 终端日志记录器
         :param level: 日志记录器级别
         """
-        console_handle.setLevel(logging.DEBUG)
+        console_handle.setLevel(self.log_level)
         self.__logger.addHandler(console_handle)
  
     # @staticmethod
@@ -126,24 +143,24 @@ class HandleLog():
         self.__set_log_formatter(error_logger_handler)
         self.__set_color_formatter(console_handle, self.log_colors_config)
  
-        self.__set_log_handler(all_logger_handler)  # 设置handler级别并添加到logger收集器
+        self.__set_log_handler(all_logger_handler, level=self.log_level)  # 设置handler级别并添加到logger收集器
         self.__set_log_handler(error_logger_handler, level=logging.ERROR)
         self.__set_color_handle(console_handle)
  
-        if level == 'info':
-            self.__logger.info(message)
-        elif level == 'debug':
-            self.__logger.debug(message)
-        elif level == 'warning':
-            self.__logger.warning(message)
-        # elif level == 'error':
-        #     self.__logger.error(message, exc_info=True, stack_info=True) # exc_info=True, stack_info=True 用于在日志中记录堆栈信息，方便查看日志进行调试
-        # elif level == 'critical':
-        #     self.__logger.critical(message, exc_info=True, stack_info=True) # exc_info=True, stack_info=True 用于在日志中记录堆栈信息，方便查看日志进行调试
-        elif level == 'error':
-            self.__logger.exception(message)
-        elif level == 'critical':
-            self.__logger.exception(message)
+            
+        match level:
+            case "info":
+                self.__logger.info(message)
+            case "debug":
+                self.__logger.debug(message)
+            case "warning":
+                self.__logger.warning(message)
+            case "error":
+                self.__logger.exception(message)
+            case "critical":
+                self.__logger.exception(message)
+            case _:
+                self.__logger.info(message)
             
         
         self.__logger.removeHandler(all_logger_handler)  # 避免日志输出重复问题
