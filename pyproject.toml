@@ -19,7 +19,14 @@ scikit-learn = "^1.4.1.post1"
 obspy = "^1.4.0"
 tqdm = "^4.66.2"
 colorlog = "^6.8.2"
+ipympl = "^0.9.3"
+opencv-python = "^4.9.0.80"
+tftb = "^0.1.4"
 
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.3"
+notebook = "^7.1.1"
 
 [build-system]
 requires = ["poetry-core"]

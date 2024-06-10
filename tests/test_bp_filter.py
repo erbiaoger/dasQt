@@ -1,5 +1,5 @@
 import unittest
-from dasQt.filter.bp_filter import bp_filter
+from dasQt.filter.bpFilter import bp_filter
 import numpy as np
 
 # def bp_filter(d, dt, f1, f2, f3, f4):
