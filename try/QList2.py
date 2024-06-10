@@ -1,13 +1,12 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QListWidget, QPushButton, QVBoxLayout, QWidget, QDialog, QLabel, QVBoxLayout
 
-# 假设的选项窗口类，简化示例
 class OptionWindow(QDialog):
     def __init__(self, moduleName):
         super().__init__()
-        self.setWindowTitle(f"{moduleName} 的选项")
+        self.setWindowTitle("模块选项")
         self.layout = QVBoxLayout()
-        self.label = QLabel(f"{moduleName}: 选项配置")
+        self.label = QLabel(f"为 {moduleName} 设置选项")
         self.layout.addWidget(self.label)
         self.setLayout(self.layout)
 
@@ -17,46 +16,43 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("模块选择示例")
 
+        # 创建两个列表控件
         self.availableModulesList = QListWidget()
         self.selectedModulesList = QListWidget()
+
+        # 添加一些示例模块到可用模块列表
         self.availableModulesList.addItems(["模块1", "模块2", "模块3", "模块4"])
 
+        # 创建添加按钮
         self.addButton = QPushButton("添加到选中")
         self.addButton.clicked.connect(self.addModule)
 
-        self.processButton = QPushButton("处理数据")
-        self.processButton.clicked.connect(self.processData)
-
+        # 创建布局并添加控件
         layout = QVBoxLayout()
         layout.addWidget(self.availableModulesList)
         layout.addWidget(self.addButton)
         layout.addWidget(self.selectedModulesList)
-        layout.addWidget(self.processButton)
 
+        # 设置主窗口的中心部件和布局
         centralWidget = QWidget()
         centralWidget.setLayout(layout)
         self.setCentralWidget(centralWidget)
 
+        # 为选中模块列表添加点击事件
         self.selectedModulesList.itemClicked.connect(self.showOptionWindow)
 
-        # 维护一个列表来记录选中的模块
-        self.selectedModules = []
-
     def addModule(self):
+        # 获取当前选中的模块项
         selectedItem = self.availableModulesList.currentItem()
-        if selectedItem and selectedItem.text() not in self.selectedModules:
+
+        # 如果有选中的项，则添加到选中模块列表
+        if selectedItem:
             self.selectedModulesList.addItem(selectedItem.text())
-            # 将选中的模块添加到列表中
-            self.selectedModules.append(selectedItem.text())
 
     def showOptionWindow(self, item):
+        # 当点击选中的模块时，显示选项窗口
         optionWindow = OptionWindow(item.text())
         optionWindow.exec()
-
-    def processData(self):
-        # 假设的处理数据函数，根据选中的模块列表处理数据
-        print("正在处理数据，使用的模块包括：", self.selectedModules)
-        # 这里可以添加实际处理数据的代码，根据selectedModules中的模块来处理数据
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

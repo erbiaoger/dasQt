@@ -1,13 +1,22 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QListWidget, QPushButton, QVBoxLayout, QWidget, QDialog, QLabel, QVBoxLayout
 
-# 假设的选项窗口类，简化示例
-class OptionWindow(QDialog):
+# 为不同模块定义不同的选项窗口类
+class OptionWindowA(QDialog):
     def __init__(self, moduleName):
         super().__init__()
         self.setWindowTitle(f"{moduleName} 的选项")
         self.layout = QVBoxLayout()
-        self.label = QLabel(f"{moduleName}: 选项配置")
+        self.label = QLabel(f"{moduleName}: 选项 A")
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+
+class OptionWindowB(QDialog):
+    def __init__(self, moduleName):
+        super().__init__()
+        self.setWindowTitle(f"{moduleName} 的选项")
+        self.layout = QVBoxLayout()
+        self.label = QLabel(f"{moduleName}: 选项 B")
         self.layout.addWidget(self.label)
         self.setLayout(self.layout)
 
@@ -24,14 +33,10 @@ class MainWindow(QMainWindow):
         self.addButton = QPushButton("添加到选中")
         self.addButton.clicked.connect(self.addModule)
 
-        self.processButton = QPushButton("处理数据")
-        self.processButton.clicked.connect(self.processData)
-
         layout = QVBoxLayout()
         layout.addWidget(self.availableModulesList)
         layout.addWidget(self.addButton)
         layout.addWidget(self.selectedModulesList)
-        layout.addWidget(self.processButton)
 
         centralWidget = QWidget()
         centralWidget.setLayout(layout)
@@ -39,24 +44,28 @@ class MainWindow(QMainWindow):
 
         self.selectedModulesList.itemClicked.connect(self.showOptionWindow)
 
-        # 维护一个列表来记录选中的模块
-        self.selectedModules = []
-
     def addModule(self):
         selectedItem = self.availableModulesList.currentItem()
-        if selectedItem and selectedItem.text() not in self.selectedModules:
+        if selectedItem:
             self.selectedModulesList.addItem(selectedItem.text())
-            # 将选中的模块添加到列表中
-            self.selectedModules.append(selectedItem.text())
 
     def showOptionWindow(self, item):
-        optionWindow = OptionWindow(item.text())
-        optionWindow.exec()
+        moduleName = item.text()
+        # 根据模块名称决定弹出哪个选项窗口
+        if moduleName == "模块1":
+            optionWindow = OptionWindowA(moduleName)
+        elif moduleName == "模块2":
+            optionWindow = OptionWindowB(moduleName)
+        else:
+            # 默认选项窗口，或者提示没有为此模块定义选项
+            optionWindow = QDialog()
+            optionWindow.setWindowTitle("提示")
+            layout = QVBoxLayout()
+            label = QLabel("此模块没有特定的选项窗口")
+            layout.addWidget(label)
+            optionWindow.setLayout(layout)
 
-    def processData(self):
-        # 假设的处理数据函数，根据选中的模块列表处理数据
-        print("正在处理数据，使用的模块包括：", self.selectedModules)
-        # 这里可以添加实际处理数据的代码，根据selectedModules中的模块来处理数据
+        optionWindow.exec()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
