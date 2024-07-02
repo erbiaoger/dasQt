@@ -16,7 +16,7 @@ figs/*
 utools/*.mat
 done/*
 logs/*.log
-*.pt
+
 dasQt/runs/*
 
 .DS_Store

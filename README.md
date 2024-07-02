@@ -20,4 +20,6 @@ poetry install
 poetry run python main.py
 ```
 
-## a
+[![Star History Chart](https://api.star-history.com/svg?repos=erbiaoger/DASDataShow&type=Date)](https://star-history.com/#erbiaoger/DASDataShow&Date)
+
+
